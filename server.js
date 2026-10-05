@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
 import dotenv from 'dotenv';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 dotenv.config();
 
@@ -34,7 +34,6 @@ async function sendToTelegram(text){
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'HTML' })
       });
-      console.log(`📲 Уведомление отправлено в Telegram (${chatId})`);
     } catch(err){
       console.error(`❌ Ошибка Telegram (${chatId}):`, err.message);
     }
@@ -53,6 +52,57 @@ const MESSAGE_LIMITS = {
   'default': 50
 };
 
+/* ==================== БАЗА ДАННЫХ ==================== */
+const pool = new pg.Pool({
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'xocatee_ai',
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD,
+  ssl: { rejectUnauthorized: false }
+});
+
+pool.query('SELECT NOW()')
+  .then(() => console.log('✅ PostgreSQL подключён'))
+  .catch(err => console.error('❌ Ошибка БД:', err.message));
+
+/* ==================== ПОЧТА (RESEND) ==================== */
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+console.log('📧 Resend инициализирован');
+
+async function sendCodeEmail(email, code){
+  try{
+    const result = await resend.emails.send({
+      from: 'XOCATEE AI <onboarding@resend.dev>',
+      to: email,
+      subject: 'Код подтверждения — XOCATEE AI',
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:30px;background:#0a0f14;color:#e8f1f5;border-radius:12px;">
+          <h1 style="color:#14e0c8;margin:0 0 20px;font-size:24px;">XOCATEE AI</h1>
+          <p style="color:#8aa0ae;margin:0 0 10px;">Ваш код подтверждения:</p>
+          <div style="background:#121b24;border:1px solid #1e2a36;border-radius:10px;padding:20px;text-align:center;margin:20px 0;">
+            <span style="font-size:36px;font-weight:800;color:#14e0c8;letter-spacing:8px;">${code}</span>
+          </div>
+          <p style="color:#8aa0ae;font-size:13px;margin:0;">Код действует 10 минут. Не сообщайте его никому.</p>
+        </div>
+      `
+    });
+
+    if(result.error){
+      console.error('❌ Resend ошибка:', result.error);
+      return { ok: false, error: result.error.message };
+    }
+
+    console.log(`📧 Код ${code} отправлен на ${email}`);
+    return { ok: true };
+  }catch(err){
+    console.error('❌ Ошибка отправки:', err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
+/* ==================== ЛИМИТЫ ==================== */
 async function getUserLimitInfo(email){
   const user = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
   if(user.rows.length === 0) return { limit: 0, used: 0, remaining: 0, plan: null, unlimited: false };
@@ -82,33 +132,6 @@ async function getUserLimitInfo(email){
   return { limit, used: usedCount, remaining, plan: planName, unlimited };
 }
 
-/* ==================== БАЗА ДАННЫХ ==================== */
-const pool = new pg.Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'xocatee_ai',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD,
-});
-
-pool.query('SELECT NOW()')
-  .then(() => console.log('✅ PostgreSQL подключён'))
-  .catch(err => console.error('❌ Ошибка БД:', err.message));
-
-/* ==================== ПОЧТА ==================== */
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  }
-});
-
-transporter.verify((error, success) => {
-  if (error) console.error('❌ Ошибка SMTP:', error.message);
-  else console.log('✅ SMTP готов к отправке писем');
-});
-
 /* ==================== AUTH ==================== */
 
 app.post('/api/send-code', async (req, res) => {
@@ -126,29 +149,16 @@ app.post('/api/send-code', async (req, res) => {
       [email, code, expires]
     );
 
-    const mailOptions = {
-      from: `"XOCATEE AI" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Код подтверждения — XOCATEE AI',
-      text: `Ваш код подтверждения: ${code}\n\nКод действует 10 минут.`,
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:30px;background:#0a0f14;color:#e8f1f5;border-radius:12px;">
-          <h1 style="color:#14e0c8;margin:0 0 20px;font-size:24px;">XOCATEE AI</h1>
-          <p style="color:#8aa0ae;margin:0 0 10px;">Ваш код подтверждения:</p>
-          <div style="background:#121b24;border:1px solid #1e2a36;border-radius:10px;padding:20px;text-align:center;margin:20px 0;">
-            <span style="font-size:36px;font-weight:800;color:#14e0c8;letter-spacing:8px;">${code}</span>
-          </div>
-          <p style="color:#8aa0ae;font-size:13px;margin:0;">Код действует 10 минут. Не сообщайте его никому.</p>
-        </div>
-      `,
-    };
+    const result = await sendCodeEmail(email, code);
 
-    await transporter.sendMail(mailOptions);
-    console.log(`📧 Код ${code} отправлен на ${email}`);
+    if(!result.ok){
+      return res.status(500).json({ error: 'Не удалось отправить код: ' + result.error });
+    }
+
     res.json({ ok: true });
   }catch(err){
-    console.error('❌ Ошибка отправки:', err.message);
-    res.status(500).json({ error: 'Не удалось отправить код' });
+    console.error('❌ Ошибка send-code:', err.message);
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
@@ -272,7 +282,6 @@ app.post('/api/subscription/cancel', async (req, res) => {
 });
 
 /* ==================== MESSAGE LIMITS ==================== */
-
 app.get('/api/message-limit/:email', async (req, res) => {
   try{
     const info = await getUserLimitInfo(req.params.email);
@@ -284,23 +293,11 @@ app.post('/api/check-message-limit', async (req, res) => {
   try{
     const { email } = req.body;
     if(!email) return res.status(400).json({ error: 'Нужен email' });
-
     const info = await getUserLimitInfo(email);
-
-    if(info.unlimited){
-      return res.json({ allowed: true, unlimited: true, used: info.used, plan: info.plan });
-    }
-
+    if(info.unlimited) return res.json({ allowed: true, unlimited: true, used: info.used, plan: info.plan });
     if(info.used >= info.limit){
-      return res.json({
-        allowed: false,
-        used: info.used,
-        limit: info.limit,
-        plan: info.plan,
-        message: 'Лимит сообщений исчерпан'
-      });
+      return res.json({ allowed: false, used: info.used, limit: info.limit, plan: info.plan, message: 'Лимит сообщений исчерпан' });
     }
-
     res.json({ allowed: true, used: info.used, limit: info.limit, remaining: info.remaining, plan: info.plan });
   }catch(err){ console.error(err); res.status(500).json({ error: 'Ошибка' }); }
 });
@@ -362,18 +359,8 @@ app.post('/api/partner', async (req, res) => {
       `INSERT INTO partner_apps (email, tiktok_link, screenshot_url) VALUES ($1, $2, $3)`,
       [email, tiktokLink, screenshotUrl || null]
     );
-
-    const text = `
-🎁 <b>Новая заявка партнёрки!</b>
-
-📧 Email: <code>${email}</code>
-🎬 TikTok: ${tiktokLink}
-📸 Скриншот: ${screenshotUrl || '—'}
-
-✅ Проверь просмотры и одобри в админке.
-    `.trim();
+    const text = `🎁 <b>Новая заявка партнёрки!</b>\n\n📧 Email: <code>${email}</code>\n🎬 TikTok: ${tiktokLink}\n📸 Скриншот: ${screenshotUrl || '—'}`;
     await sendToTelegram(text);
-
     res.json({ ok: true });
   }catch(err){ console.error(err); res.status(500).json({ error: 'Ошибка' }); }
 });
@@ -382,27 +369,12 @@ app.post('/api/partner', async (req, res) => {
 app.post('/api/payment-notify', async (req, res) => {
   try{
     const { fio, email, plan, amount, comment } = req.body;
-
     if(!email || !email.includes('@')) return res.status(400).json({ error: 'Некорректный email' });
     if(!plan) return res.status(400).json({ error: 'Не указан тариф' });
 
     const now = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
-
-    const text = `
-💰 <b>НОВАЯ ОПЛАТА — XOCATEE AI</b>
-
-👤 ФИО: ${fio || '—'}
-📧 Email: <code>${email}</code>
-📦 Тариф: <b>${plan}</b>
-💵 Сумма: <b>${amount || '—'} ₽</b>
-🕐 Время: ${now}
-📝 Комментарий: ${comment || '—'}
-
-✅ Проверь оплату → выдай подписку в админке: <b>localhost:3000/admin.html</b>
-    `.trim();
-
+    const text = `💰 <b>НОВАЯ ОПЛАТА — XOCATEE AI</b>\n\n👤 ФИО: ${fio || '—'}\n📧 Email: <code>${email}</code>\n📦 Тариф: <b>${plan}</b>\n💵 Сумма: <b>${amount || '—'} ₽</b>\n🕐 Время: ${now}\n📝 Комментарий: ${comment || '—'}`;
     await sendToTelegram(text);
-    console.log(`💰 Новая оплата: ${email} — ${plan} — ${amount}₽`);
     res.json({ ok: true });
   }catch(err){
     console.error('Ошибка payment-notify:', err.message);
@@ -459,10 +431,7 @@ app.post('/api/admin/gift-subscription', checkAdmin, async (req, res) => {
       [user.rows[0].id, 'gift', planName || 'Подарок', until]
     );
 
-    await pool.query(
-      `UPDATE partner_apps SET status = 'approved' WHERE email = $1 AND status = 'pending'`,
-      [email]
-    );
+    await pool.query(`UPDATE partner_apps SET status = 'approved' WHERE email = $1 AND status = 'pending'`, [email]);
 
     res.json({ ok: true, subscription: result.rows[0] });
   }catch(err){ console.error(err); res.status(500).json({ error: 'Ошибка' }); }
@@ -496,5 +465,6 @@ app.listen(PORT, () => {
   console.log(`\n🚀 Сервер запущен: http://localhost:${PORT}`);
   console.log(`👑 Админка: http://localhost:${PORT}/admin.html`);
   console.log(`📲 Telegram: уведомления в личку + группу`);
+  console.log(`📧 Email: Resend API`);
   console.log(`📊 Лимиты сообщений: активны\n`);
 });
