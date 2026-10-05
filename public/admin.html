@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Админ-панель — XOCATEE AI</title>
+<style>
+  :root{--bg:#0a0f14;--card:#121b24;--border:#1e2a36;--teal:#14e0c8;--text:#e8f1f5;--muted:#8aa0ae;--danger:#ff5c7a;--ok:#2ee6a8;--warn:#ffc814}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);padding:30px;line-height:1.5}
+  .container{max-width:1280px;margin:0 auto}
+  h1{color:var(--teal);margin-bottom:20px}
+  h2{font-size:20px;margin:0 0 15px;color:var(--teal)}
+  input,select,button{padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px;font-family:inherit}
+  input,select{width:100%;max-width:400px}
+  button{background:var(--teal);color:#04110f;font-weight:700;cursor:pointer;border:none;transition:.15s}
+  button:hover{filter:brightness(1.1)}
+  button.danger{background:var(--danger);color:#fff}
+  button.small{padding:6px 12px;font-size:12px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
+  .card.paid-card{border-color:rgba(46,230,168,.4);background:linear-gradient(135deg,rgba(46,230,168,.05),transparent)}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th,td{padding:10px;text-align:left;border-bottom:1px solid var(--border);font-size:13.5px;vertical-align:top}
+  th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.5px}
+  .ok{color:var(--ok)}
+  .muted{color:var(--muted)}
+  .badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;background:rgba(20,224,200,.1);color:var(--teal);border:1px solid rgba(20,224,200,.3)}
+  .badge.pending{background:rgba(255,200,20,.15);color:var(--warn);border-color:rgba(255,200,20,.4)}
+  .badge.approved{background:rgba(46,230,168,.15);color:var(--ok);border-color:rgba(46,230,168,.3)}
+  .badge.paid{background:rgba(46,230,168,.15);color:var(--ok);border-color:rgba(46,230,168,.4)}
+  .badge.free{background:rgba(138,160,174,.15);color:var(--muted);border-color:rgba(138,160,174,.3)}
+  .email-big{font-family:monospace;color:var(--teal);font-size:14px;font-weight:700}
+  #authBox{max-width:400px;margin:80px auto;text-align:center}
+  #adminPanel{display:none}
+  #status{margin-top:10px;font-size:13px}
+  .count{font-size:24px;font-weight:800;color:var(--ok)}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div id="authBox">
+    <h1>🔐 Админ-панель</h1>
+    <p class="muted" style="margin-bottom:20px">XOCATEE AI — только для владельца</p>
+    <input type="password" id="adminPass" placeholder="Пароль администратора" style="margin-bottom:12px">
+    <button onclick="login()">Войти</button>
+    <div id="status"></div>
+  </div>
+
+  <div id="adminPanel">
+    <div class="row" style="justify-content:space-between">
+      <h1>👑 Админ-панель XOCATEE AI</h1>
+      <button class="danger small" onclick="logout()">Выйти</button>
+    </div>
+
+    <div class="card">
+      <h2>📊 Статистика</h2>
+      <div id="stats" class="muted">Загрузка...</div>
+    </div>
+
+    <div class="card">
+      <h2>🎁 Выдать подписку вручную</h2>
+      <p class="muted" style="margin-bottom:12px">Введи email пользователя, выбери тариф → подписка активируется мгновенно.</p>
+      <div class="row">
+        <input type="email" id="giftEmail" placeholder="email@example.com" style="max-width:300px">
+        <select id="giftPlan" style="max-width:300px">
+          <option value="trial|3|Пробный (3 дня)">Пробный — 3 дня</option>
+          <option value="month|1|Эконом (1 месяц)">Эконом — 1 месяц (490 ₽)</option>
+          <option value="biz3|3|Бизнес (3 месяца)">Бизнес — 3 месяца (1200 ₽)</option>
+          <option value="biz6|6|Бизнес-плюс (6 месяцев)">Бизнес-плюс — 6 месяцев (1900 ₽)</option>
+          <option value="vip12|12|ВИП (12 месяцев)">ВИП — 12 месяцев (4000 ₽)</option>
+          <option value="owner|0|Владелец (бессрочно)">👑 Владелец (бессрочно)</option>
+        </select>
+        <button onclick="giftSub()">🎁 Выдать</button>
+      </div>
+      <p class="muted" style="font-size:12px">⚠️ Владелец — бессрочная подписка до 2099 года.</p>
+    </div>
+
+    <div class="card paid-card">
+      <h2>💰 Купили подписку</h2>
+      <p class="muted" style="margin-bottom:12px">Все пользователи с активной подпиской.</p>
+      <div id="paidUsersList" class="muted">Загрузка...</div>
+    </div>
+
+    <div class="card">
+      <h2>📹 Заявки партнёрки (TikTok)</h2>
+      <div id="appsList" class="muted">Загрузка...</div>
+    </div>
+
+    <div class="card">
+      <h2>👥 Все пользователи</h2>
+      <div id="usersList" class="muted">Загрузка...</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API = '';
+let adminPass = '';
+
+function login(){
+  const p = document.getElementById('adminPass').value.trim();
+  if(!p) return document.getElementById('status').textContent = 'Введите пароль';
+  adminPass = p;
+  loadAll();
+}
+
+function logout(){
+  adminPass = '';
+  document.getElementById('adminPanel').style.display = 'none';
+  document.getElementById('authBox').style.display = 'block';
+}
+
+async function api(path, options = {}){
+  options.headers = {...(options.headers||{}), 'x-admin-password': adminPass, 'Content-Type': 'application/json'};
+  const r = await fetch(API + path, options);
+  if(r.status === 403){ logout(); throw new Error('Неверный пароль'); }
+  return r.json();
+}
+
+async function loadAll(){
+  try{
+    const stats = await api('/api/admin/users');
+    if(!stats.users){ logout(); return; }
+    document.getElementById('authBox').style.display = 'none';
+    document.getElementById('adminPanel').style.display = 'block';
+    renderStats(stats.users);
+    renderPaidUsers(stats.users);
+    renderUsers(stats.users);
+    const apps = await api('/api/admin/partner-apps');
+    renderApps(apps.apps || []);
+  }catch(e){
+    document.getElementById('status').textContent = '❌ ' + e.message;
+  }
+}
+
+function renderStats(users){
+  const total = users.length;
+  const active = users.filter(u=>u.active).length;
+  const paid = users.filter(u=>u.active && u.plan_name && u.plan_name !== 'Пробный (3 дня)').length;
+  document.getElementById('stats').innerHTML = `
+    Всего пользователей: <b class="ok">${total}</b> &nbsp;·&nbsp;
+    Активных подписок: <b class="ok">${active}</b> &nbsp;·&nbsp;
+    Платных подписок: <b class="ok">${paid}</b>
+  `;
+}
+
+function renderPaidUsers(users){
+  const paid = users.filter(u => u.active && u.plan_name);
+  if(!paid.length){
+    document.getElementById('paidUsersList').innerHTML = '<p class="muted">Пока никто не купил подписку</p>';
+    return;
+  }
+  document.getElementById('paidUsersList').innerHTML = `
+    <p style="margin-bottom:10px">Всего купивших: <span class="count">${paid.length}</span></p>
+    <table>
+      <tr>
+        <th>Email</th>
+        <th>ФИО</th>
+        <th>Тариф</th>
+        <th>Оплачено</th>
+        <th>Дата оплаты</th>
+        <th>Действует до</th>
+        <th>Автопродление</th>
+      </tr>
+      ${paid.map(u=>`
+        <tr>
+          <td><span class="email-big">${escapeHtml(u.email)}</span></td>
+          <td>${escapeHtml(u.fio)}</td>
+          <td><span class="badge paid">${escapeHtml(u.plan_name)}</span></td>
+          <td>${u.amount ? u.amount + ' ₽' : '—'}</td>
+          <td>${u.paid_at ? new Date(u.paid_at).toLocaleDateString('ru-RU') : '—'}</td>
+          <td>${u.until ? new Date(u.until).toLocaleDateString('ru-RU') : '—'}</td>
+          <td>${u.auto_renew ? '<span class="ok">Да</span>' : '<span class="muted">Нет</span>'}</td>
+        </tr>`).join('')}
+    </table>
+  `;
+}
+
+function renderUsers(users){
+  if(!users.length){ document.getElementById('usersList').innerHTML = '<p class="muted">Пока никого</p>'; return; }
+  document.getElementById('usersList').innerHTML = `
+    <table>
+      <tr><th>ФИО</th><th>Email</th><th>Тариф</th><th>Действует до</th><th>Действие</th></tr>
+      ${users.map(u=>`
+        <tr>
+          <td>${escapeHtml(u.fio)}</td>
+          <td>${escapeHtml(u.email)}</td>
+          <td>${u.plan_name ? `<span class="badge ${u.active?'paid':'free'}">${escapeHtml(u.plan_name)}</span>` : '<span class="muted">—</span>'}</td>
+          <td>${u.until ? new Date(u.until).toLocaleDateString('ru-RU') : '—'}</td>
+          <td><button class="small" onclick="quickGift('${escapeHtml(u.email)}')">🎁 2 мес</button></td>
+        </tr>`).join('')}
+    </table>`;
+}
+
+function renderApps(apps){
+  if(!apps.length){ document.getElementById('appsList').innerHTML = '<p class="muted">Заявок нет</p>'; return; }
+  document.getElementById('appsList').innerHTML = `
+    <table>
+      <tr><th>Email</th><th>Ссылка TikTok</th><th>Скриншот</th><th>Дата</th><th>Статус</th><th>Действие</th></tr>
+      ${apps.map(a=>`
+        <tr>
+          <td>${escapeHtml(a.email)}</td>
+          <td><a href="${escapeHtml(a.tiktok_link)}" target="_blank" style="color:var(--teal)">Открыть</a></td>
+          <td>${a.screenshot_url ? escapeHtml(a.screenshot_url) : '—'}</td>
+          <td>${new Date(a.created_at).toLocaleDateString('ru-RU')}</td>
+          <td><span class="badge ${a.status}">${a.status}</span></td>
+          <td>
+            ${a.status === 'pending'
+              ? `<button class="small" onclick="quickGift('${escapeHtml(a.email)}')">✅ Одобрить (2 мес)</button>`
+              : '<span class="muted">Одобрено</span>'}
+          </td>
+        </tr>`).join('')}
+    </table>`;
+}
+
+async function giftSub(){
+  const email = document.getElementById('giftEmail').value.trim();
+  const selected = document.getElementById('giftPlan').value;
+  if(!email) return alert('Введите email');
+  if(!selected) return alert('Выберите тариф');
+
+  const [planKey, value, planName] = selected.split('|');
+
+  try{
+    if(planKey === 'owner'){
+      await api('/api/admin/make-owner', {
+        method:'POST',
+        body: JSON.stringify({ email })
+      });
+      alert(`👑 ${email} теперь владелец (бессрочно)!`);
+    } else if(planKey === 'trial'){
+      await api('/api/admin/gift-subscription', {
+        method:'POST',
+        body: JSON.stringify({ email, days: parseInt(value), planName })
+      });
+      alert(`🎁 Пробная подписка на ${value} дн. выдана: ${email}`);
+    } else {
+      await api('/api/admin/gift-subscription', {
+        method:'POST',
+        body: JSON.stringify({ email, months: parseInt(value), planName })
+      });
+      alert(`🎁 Подписка выдана: ${email} — ${planName}`);
+    }
+    document.getElementById('giftEmail').value = '';
+    loadAll();
+  }catch(e){ alert('Ошибка: ' + e.message); }
+}
+
+async function quickGift(email){
+  if(!confirm(`Выдать 2 месяца подписки пользователю ${email}?`)) return;
+  try{
+    await api('/api/admin/gift-subscription', {
+      method:'POST',
+      body: JSON.stringify({ email, months: 2, planName: 'Подарок (2 мес)' })
+    });
+    alert(`✅ ${email} получил 2 месяца!`);
+    loadAll();
+  }catch(e){ alert('Ошибка: ' + e.message); }
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+document.getElementById('adminPass').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') login();
+});
+</script>
+</body>
+</html>
