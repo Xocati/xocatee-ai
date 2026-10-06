@@ -68,13 +68,12 @@ pool.query('SELECT NOW()')
 
 /* ==================== ПОЧТА (RESEND) ==================== */
 const resend = new Resend(process.env.RESEND_API_KEY);
-
 console.log('📧 Resend инициализирован');
 
 async function sendCodeEmail(email, code){
   try{
     const result = await resend.emails.send({
-      from: 'XOCATEE AI <onboarding@resend.dev>',
+      from: 'XOCATEE AI <noreply@xocatee.ru>',
       to: email,
       subject: 'Код подтверждения — XOCATEE AI',
       html: `
@@ -465,6 +464,6 @@ app.listen(PORT, () => {
   console.log(`\n🚀 Сервер запущен: http://localhost:${PORT}`);
   console.log(`👑 Админка: http://localhost:${PORT}/admin.html`);
   console.log(`📲 Telegram: уведомления в личку + группу`);
-  console.log(`📧 Email: Resend API`);
+  console.log(`📧 Email: Resend (noreply@xocatee.ru)`);
   console.log(`📊 Лимиты сообщений: активны\n`);
 });
